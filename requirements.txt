@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+matplotlib
+librosa
+numpy
+pandas
+python-multipart
