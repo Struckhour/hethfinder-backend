@@ -32,17 +32,33 @@ async def create_spectrogram(file: UploadFile = File(...)):
 
     # 2️⃣ Generate STFT and convert to dB
     D = librosa.stft(y)
+    D = D[120:743,:]
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
 
-    # 3️⃣ Plot spectrogram
+    # # 3️⃣ Plot spectrogram
     fig, ax = plt.subplots(figsize=(10, 4))
-    img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='log', ax=ax)
-    fig.colorbar(img, ax=ax, format="%+2.0f dB")
-    ax.set_title("Spectrogram")
+    # img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='log', ax=ax)
+    # fig.colorbar(img, ax=ax, format="%+2.0f dB")
+    # ax.set_title("Spectrogram")
 
-    # 4️⃣ Save figure to bytes
+    # # 4️⃣ Save figure to bytes
+    # buf = io.BytesIO()
+    # fig.savefig(buf, format="png")
+    # plt.close(fig)
+    # buf.seek(0)
+
+    # fig, ax = plt.subplots(figsize=(10, 4))
+
+    # show spectrogram
+    img = librosa.display.specshow(S_db, sr=sr, x_axis=None, y_axis=None, ax=ax)
+
+    # hide everything around the image
+    ax.axis('off')          # removes ticks, labels, frame, etc.
+    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # remove padding/margins
+
+    # save to bytes
     buf = io.BytesIO()
-    fig.savefig(buf, format="png")
+    fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0)
     plt.close(fig)
     buf.seek(0)
 
