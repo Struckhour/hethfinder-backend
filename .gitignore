@@ -1,5 +1,23 @@
+# Virtual environment
+fave-audio/
+venv/
+
+# Python cache
 __pycache__/
 *.pyc
-.env
-venv/
+*.pyo
+*.pyd
+*.env
+*.venv
+*.egg-info/
+dist/
+build/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+
+# OS files
 .DS_Store
+Thumbs.db

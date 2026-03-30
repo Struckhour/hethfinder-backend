@@ -1,7 +1,8 @@
-fastapi
-uvicorn[standard]
-matplotlib
-librosa
-numpy
-pandas
-python-multipart
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+numpy==1.26.0
+matplotlib==3.8.0
+pandas==2.0.3
+python-multipart==0.0.22
+librosa==0.10.2.post1
+soundfile==0.12.1
