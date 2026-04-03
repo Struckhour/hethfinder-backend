@@ -1,66 +1,24 @@
-from fastapi import FastAPI, File, UploadFile
-from fastapi.responses import StreamingResponse
-import io
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-import matplotlib.pyplot as plt
-import numpy as np
-import librosa
-import librosa.display
+
+# relative import from the routes package
+from .routes import spectrogram
 
 app = FastAPI()
 
 # ---- CORS setup ----
 origins = [
     "http://localhost:5173",  # Svelte dev server
-    "http://127.0.0.1:5173",  # just in case
+    "http://127.0.0.1:5173",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,   # allow your frontend
+    allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],     # allow all HTTP methods
-    allow_headers=["*"],     # allow all headers
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-@app.post("/spectrogram")
-async def create_spectrogram(file: UploadFile = File(...)):
-    # 1️⃣ Read the uploaded audio
-    audio_bytes = await file.read()
-    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
-
-    # 2️⃣ Generate STFT and convert to dB
-    D = librosa.stft(y)
-    D = D[120:743,:]
-    S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
-
-    # # 3️⃣ Plot spectrogram
-    fig, ax = plt.subplots(figsize=(10, 4))
-    # img = librosa.display.specshow(S_db, sr=sr, x_axis='time', y_axis='log', ax=ax)
-    # fig.colorbar(img, ax=ax, format="%+2.0f dB")
-    # ax.set_title("Spectrogram")
-
-    # # 4️⃣ Save figure to bytes
-    # buf = io.BytesIO()
-    # fig.savefig(buf, format="png")
-    # plt.close(fig)
-    # buf.seek(0)
-
-    # fig, ax = plt.subplots(figsize=(10, 4))
-
-    # show spectrogram
-    img = librosa.display.specshow(S_db, sr=sr, x_axis=None, y_axis=None, ax=ax)
-
-    # hide everything around the image
-    ax.axis('off')          # removes ticks, labels, frame, etc.
-    fig.subplots_adjust(left=0, right=1, top=1, bottom=0)  # remove padding/margins
-
-    # save to bytes
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches='tight', pad_inches=0)
-    plt.close(fig)
-    buf.seek(0)
-
-    # 5️⃣ Return as PNG response
-    return StreamingResponse(buf, media_type="image/png")
+# include router
+app.include_router(spectrogram.router)
