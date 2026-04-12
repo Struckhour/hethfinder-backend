@@ -21,3 +21,6 @@ build/
 # OS files
 .DS_Store
 Thumbs.db
+
+# ML model files
+app/ml/
