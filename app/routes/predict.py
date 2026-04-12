@@ -2,8 +2,16 @@ import io
 import numpy as np
 import librosa
 import tensorflow as tf
-
+import uuid
+import os
+from fastapi import BackgroundTasks
 from fastapi import APIRouter, UploadFile, File
+
+jobs = {}
+UPLOAD_DIR = "tmp"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
 
 router = APIRouter()
 
@@ -76,19 +84,59 @@ def get_song_times(all_times, all_scores):
     return song_times
 
 
+def process_file(job_id, file_path):
+    jobs[job_id]["status"] = "processing"
+
+    try:
+        with open(file_path, "rb") as f:
+            audio_bytes = f.read()
+
+        # your existing pipeline
+        data = fourier_from_bytes(audio_bytes)
+        times, scores = song_model_scores(data)
+        detections = get_song_times(times, scores)
+
+        jobs[job_id]["status"] = "done"
+        jobs[job_id]["result"] = detections
+
+    except Exception as e:
+        jobs[job_id]["status"] = "error"
+        jobs[job_id]["error"] = str(e)
+
+
+
+
 @router.post("/predict")
-async def predict(file: UploadFile = File(...)):
-    audio_bytes = await file.read()
+async def predict(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
 
-    # 1. spectrogram
-    data = fourier_from_bytes(audio_bytes)
+    job_id = str(uuid.uuid4())
+    file_path = os.path.join(UPLOAD_DIR, f"{job_id}.wav")
 
-    # 2. model inference
-    times, scores = song_model_scores(data)
+    # save file to disk
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
 
-    # 3. extract detections
-    detections = get_song_times(times, scores)
+    # initialize job
+    jobs[job_id] = {"status": "queued"}
 
-    return {
-        "detections": detections[:50]  # limit for sanity
-    }
+    # run in background
+    background_tasks.add_task(process_file, job_id, file_path)
+
+    return {"job_id": job_id}
+
+
+@router.get("/status/{job_id}")
+def get_status(job_id: str):
+    return jobs.get(job_id, {"status": "not_found"})
+
+@router.get("/result/{job_id}")
+def get_result(job_id: str):
+    job = jobs.get(job_id)
+
+    if not job:
+        return {"error": "not_found"}
+
+    if job["status"] != "done":
+        return {"status": job["status"]}
+
+    return {"detections": job["result"]}
