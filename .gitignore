@@ -24,3 +24,6 @@ Thumbs.db
 
 # ML model files
 app/ml/
+
+#tmp folder with wav files
+tmp/
