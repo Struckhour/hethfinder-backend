@@ -413,8 +413,8 @@ def build_detection_boxes(data, cleaned_song_times, intro_threshold):
     for t, f in zip(start_times, start_freqs):
         detections.append({
             "time": float(t),
-            "low_freq_hz": float(f - 400),
-            "high_freq_hz": float(f + 400),
+            "low_freq_hz": float(f - 200),
+            "high_freq_hz": float(f + 200),
         })
 
     return detections
