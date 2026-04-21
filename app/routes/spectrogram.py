@@ -13,7 +13,7 @@ router = APIRouter()
 @router.post("/spectrogram")
 async def create_spectrogram(file: UploadFile = File(...)):
     audio_bytes = await file.read()
-    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
+    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=22050)
 
     duration_sec = len(y) / sr
 

@@ -30,7 +30,7 @@ def compute_intro_threshold(array):
 
 
 def fourier_from_bytes(audio_bytes):
-    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=None)
+    y, sr = librosa.load(io.BytesIO(audio_bytes), sr=22050)
     D = librosa.stft(y)
     D = D[120:743, :]
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
