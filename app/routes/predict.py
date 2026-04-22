@@ -6,6 +6,8 @@ import uuid
 import os
 from fastapi import BackgroundTasks
 from fastapi import APIRouter, UploadFile, File
+import time
+
 
 jobs = {}
 UPLOAD_DIR = "tmp"
@@ -35,6 +37,15 @@ def fourier_from_bytes(audio_bytes):
     D = D[120:743, :]
     S_db = librosa.amplitude_to_db(np.abs(D), ref=np.max)
     return S_db
+
+
+
+def timed_step(name, fn):
+    start = time.perf_counter()
+    result = fn()
+    end = time.perf_counter()
+    print(f"[TIMING] {name}: {end - start:.3f} sec")
+    return result
 
 
 def song_predict(array, column, columns):
@@ -419,20 +430,75 @@ def build_detection_boxes(data, cleaned_song_times, intro_threshold):
 
     return detections
 
+
+# def process_file(job_id, file_path):
+#     jobs[job_id]["status"] = "processing"
+
+#     try:
+#         with open(file_path, "rb") as f:
+#             audio_bytes = f.read()
+
+#         # your existing pipeline
+#         data = fourier_from_bytes(audio_bytes)
+#         intro_threshold = compute_intro_threshold(data)
+#         times, scores = song_model_scores(data)
+
+#         refined = refine_song_events(times, scores)
+#         detections = build_detection_boxes(data, refined["cleaned_song_times"], intro_threshold)
+
+#         jobs[job_id]["status"] = "done"
+#         jobs[job_id]["result"] = {
+#             "raw_scores_count": len(scores),
+#             "raw_candidate_times": refined["raw_candidate_times"],
+#             "cleaned_song_times": refined["cleaned_song_times"],
+#             "detections": detections
+#         }
+
+#     except Exception as e:
+#         jobs[job_id]["status"] = "error"
+#         jobs[job_id]["error"] = str(e)
+
+
 def process_file(job_id, file_path):
+    import time
+    total_start = time.perf_counter()
+
     jobs[job_id]["status"] = "processing"
 
     try:
-        with open(file_path, "rb") as f:
-            audio_bytes = f.read()
+        # ---- Read file ----
+        audio_bytes = timed_step("read_file", lambda: open(file_path, "rb").read())
 
-        # your existing pipeline
-        data = fourier_from_bytes(audio_bytes)
-        intro_threshold = compute_intro_threshold(data)
-        times, scores = song_model_scores(data)
+        # ---- Pipeline ----
+        data = timed_step("fourier_from_bytes", lambda: fourier_from_bytes(audio_bytes))
 
-        refined = refine_song_events(times, scores)
-        detections = build_detection_boxes(data, refined["cleaned_song_times"], intro_threshold)
+        intro_threshold = timed_step(
+            "compute_intro_threshold",
+            lambda: compute_intro_threshold(data)
+        )
+
+        times, scores = timed_step(
+            "song_model_scores",
+            lambda: song_model_scores(data)
+        )
+
+        refined = timed_step(
+            "refine_song_events",
+            lambda: refine_song_events(times, scores)
+        )
+
+        detections = timed_step(
+            "build_detection_boxes",
+            lambda: build_detection_boxes(
+                data,
+                refined["cleaned_song_times"],
+                intro_threshold
+            )
+        )
+
+        # ---- Total time ----
+        total_end = time.perf_counter()
+        print(f"[TIMING] TOTAL: {total_end - total_start:.3f} sec")
 
         jobs[job_id]["status"] = "done"
         jobs[job_id]["result"] = {
