@@ -4,15 +4,20 @@ from fastapi.middleware.cors import CORSMiddleware
 # relative import from the routes package
 from .routes import spectrogram
 from .routes import predict
-
+import os
 
 app = FastAPI()
 
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
 # ---- CORS setup ----
-origins = [
-    "http://localhost:5173",  # Svelte dev server
-    "http://127.0.0.1:5173",
-]
+origins = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,http://127.0.0.1:5173"
+).split(",")
 
 app.add_middleware(
     CORSMiddleware,

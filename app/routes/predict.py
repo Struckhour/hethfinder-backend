@@ -7,13 +7,14 @@ import os
 from fastapi import BackgroundTasks
 from fastapi import APIRouter, UploadFile, File
 import time
-
+import json
+from pathlib import Path
 
 jobs = {}
-UPLOAD_DIR = "tmp"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-
+DATA_DIR = Path(os.getenv("DATA_DIR", "tmp"))
+JOBS_DIR = DATA_DIR / "jobs"
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter()
 
@@ -25,6 +26,36 @@ model = tf.saved_model.load(MODEL_PATH)
 infer = model.signatures["serving_default"]
 
 time_converter = 0.023219814
+
+def job_dir(job_id):
+    path = JOBS_DIR / job_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def job_status_path(job_id):
+    return job_dir(job_id) / "status.json"
+
+
+def write_job(job_id, data):
+    jobs[job_id] = data
+    with open(job_status_path(job_id), "w") as f:
+        json.dump(data, f)
+
+
+def read_job(job_id):
+    if job_id in jobs:
+        return jobs[job_id]
+
+    path = job_status_path(job_id)
+    if not path.exists():
+        return None
+
+    with open(path, "r") as f:
+        data = json.load(f)
+
+    jobs[job_id] = data
+    return data
 
 def compute_intro_threshold(array):
     array_median = np.median(array)
@@ -463,7 +494,9 @@ def process_file(job_id, file_path):
     import time
     total_start = time.perf_counter()
 
-    jobs[job_id]["status"] = "processing"
+    job = read_job(job_id) or {}
+    job["status"] = "processing"
+    write_job(job_id, job)
 
     try:
         # ---- Read file ----
@@ -500,31 +533,38 @@ def process_file(job_id, file_path):
         total_end = time.perf_counter()
         print(f"[TIMING] TOTAL: {total_end - total_start:.3f} sec")
 
-        jobs[job_id]["status"] = "done"
-        jobs[job_id]["result"] = {
+        job = read_job(job_id) or {}
+        job["status"] = "done"
+        job["result"] = {
             "raw_scores_count": len(scores),
             "raw_candidate_times": refined["raw_candidate_times"],
             "cleaned_song_times": refined["cleaned_song_times"],
             "detections": detections
         }
+        write_job(job_id, job)
 
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        jobs[job_id]["error"] = str(e)
+        job = read_job(job_id) or {}
+        job["status"] = "error"
+        job["error"] = str(e)
+        write_job(job_id, job)
 
 
 @router.post("/predict")
 async def predict(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
 
     job_id = str(uuid.uuid4())
-    file_path = os.path.join(UPLOAD_DIR, f"{job_id}.wav")
+    file_path = job_dir(job_id) / "input.wav"
 
     # save file to disk
     with open(file_path, "wb") as f:
         f.write(await file.read())
 
     # initialize job
-    jobs[job_id] = {"status": "queued"}
+    write_job(job_id, {
+        "status": "queued",
+        "file_path": str(file_path)
+    })
 
     # run in background
     background_tasks.add_task(process_file, job_id, file_path)
@@ -534,17 +574,21 @@ async def predict(background_tasks: BackgroundTasks, file: UploadFile = File(...
 
 @router.get("/status/{job_id}")
 def get_status(job_id: str):
-    return jobs.get(job_id, {"status": "not_found"})
+    job = read_job(job_id)
+    if not job:
+        return {"status": "not_found"}
+
+    return {"status": job.get("status", "unknown")}
 
 
 @router.get("/result/{job_id}")
 def get_result(job_id: str):
-    job = jobs.get(job_id)
+    job = read_job(job_id)
 
     if not job:
         return {"error": "not_found"}
 
-    if job["status"] != "done":
-        return {"status": job["status"]}
+    if job.get("status") != "done":
+        return {"status": job.get("status")}
 
-    return job["result"]
+    return job.get("result", {})
