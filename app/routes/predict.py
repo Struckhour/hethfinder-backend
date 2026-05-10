@@ -16,6 +16,9 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "tmp"))
 JOBS_DIR = DATA_DIR / "jobs"
 JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
+MAX_UPLOAD_SIZE_MB = 200
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
 router = APIRouter()
 
 # ---- load model ONCE (important) ----
@@ -26,6 +29,12 @@ model = tf.saved_model.load(MODEL_PATH)
 infer = model.signatures["serving_default"]
 
 time_converter = 0.023219814
+
+def has_active_job():
+    for job in jobs.values():
+        if job.get("status") in ["queued", "processing"]:
+            return True
+    return False
 
 def job_dir(job_id):
     path = JOBS_DIR / job_id
@@ -553,12 +562,27 @@ def process_file(job_id, file_path):
 @router.post("/predict")
 async def predict(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
 
+    if has_active_job():
+        return {
+            "error": "server_busy",
+            "message": "Another audio file is currently being processed. Please try again later."
+        }
+
     job_id = str(uuid.uuid4())
     file_path = job_dir(job_id) / "input.wav"
 
     # save file to disk
+    audio_bytes = await file.read()
+
+    if len(audio_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        return {
+            "error": "file_too_large",
+            "message": f"File is too large. Maximum size is {MAX_UPLOAD_SIZE_MB} MB."
+        }
+
+    # save file to disk
     with open(file_path, "wb") as f:
-        f.write(await file.read())
+        f.write(audio_bytes)
 
     # initialize job
     write_job(job_id, {

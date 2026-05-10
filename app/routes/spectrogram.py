@@ -9,6 +9,9 @@ from pathlib import Path
 from fastapi import APIRouter, UploadFile, File
 from fastapi.responses import StreamingResponse
 
+MAX_UPLOAD_SIZE_MB = 200
+MAX_UPLOAD_SIZE_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
+
 def make_spectrogram_buffer(audio_bytes: bytes):
     y, sr = librosa.load(io.BytesIO(audio_bytes), sr=22050)
 
@@ -52,6 +55,13 @@ router = APIRouter()
 @router.post("/spectrogram")
 async def create_spectrogram(file: UploadFile = File(...)):
     audio_bytes = await file.read()
+
+    if len(audio_bytes) > MAX_UPLOAD_SIZE_BYTES:
+        return {
+            "error": "file_too_large",
+            "message": f"File is too large. Maximum size is {MAX_UPLOAD_SIZE_MB} MB."
+        }
+
     buf = make_spectrogram_buffer(audio_bytes)
     return StreamingResponse(buf, media_type="image/png")
 
