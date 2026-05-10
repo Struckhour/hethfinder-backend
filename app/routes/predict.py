@@ -9,6 +9,8 @@ from fastapi import APIRouter, UploadFile, File
 import time
 import json
 from pathlib import Path
+import shutil
+from datetime import datetime, timedelta
 
 jobs = {}
 
@@ -29,6 +31,26 @@ model = tf.saved_model.load(MODEL_PATH)
 infer = model.signatures["serving_default"]
 
 time_converter = 0.023219814
+
+def cleanup_old_jobs(max_age_hours=48):
+    cutoff = datetime.now() - timedelta(hours=max_age_hours)
+
+    for job_path in JOBS_DIR.iterdir():
+
+        if not job_path.is_dir():
+            continue
+
+        try:
+            modified_time = datetime.fromtimestamp(
+                job_path.stat().st_mtime
+            )
+
+            if modified_time < cutoff:
+                print(f"Deleting old job: {job_path}")
+                shutil.rmtree(job_path)
+
+        except Exception as e:
+            print(f"Cleanup failed for {job_path}: {e}")
 
 def has_active_job():
     for job in jobs.values():
@@ -561,7 +583,7 @@ def process_file(job_id, file_path):
 
 @router.post("/predict")
 async def predict(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
-
+    cleanup_old_jobs()
     if has_active_job():
         return {
             "error": "server_busy",
